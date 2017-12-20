@@ -10,8 +10,8 @@ bool isValidContentType = false;
 
 // Your SSID and PSWD that the chip needs
 // to connect to
-const char* SSID = "HKPhone";
-const char* PSWD = "88888888";
+const char* SSID = "TIC";
+const char* PSWD = "T1cVi3tn@m";
 
 // S3 Bucket Config
 String host = "esp32dat.s3-ap-southeast-1.amazonaws.com"; // Host => bucket-name.s3.region.amazonaws.com

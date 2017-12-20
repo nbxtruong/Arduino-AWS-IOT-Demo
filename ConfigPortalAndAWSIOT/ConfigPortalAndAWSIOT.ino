@@ -1,16 +1,29 @@
 #include <AWS_IOT.h>
-#include <WiFi.h>
 #include <ArduinoJson.h>
 
-AWS_IOT hornbill;
+#if defined(ESP8266)
+#include <ESP8266WiFi.h>          //https://github.com/esp8266/Arduino
+#else
+#include <WiFi.h>          //https://github.com/esp8266/Arduino
+#endif
 
-char WIFI_SSID[]="TIC";
-char WIFI_PASSWORD[]="T1cVi3tn@m";
+//needed for library
+#if defined(ESP8266)
+#include <ESP8266WebServer.h>
+#else
+#include <WebServer.h>
+#endif
+#include <DNSServer.h>
+#include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager
+
+AWS_IOT hornbill;
+#define TRIGGER_PIN 0
+#define LED_PIN 2
+
 char HOST_ADDRESS[]="a2oxjrmrtmst02.iot.us-west-2.amazonaws.com";
 char CLIENT_ID[]= "TruongESP32";
 char TOPIC_NAME[]= "$aws/things/TruongESP32/shadow/update";
 
-int status = WL_IDLE_STATUS;
 int tick=0,msgCount=0,msgReceived = 0;
 char payload[512];
 char rcvdPayload[512];
@@ -23,19 +36,20 @@ void mySubCallBackHandler (char *topicName, int payloadLen, char *payLoad)
 }
 
 void setup() {
-    pinMode(2, OUTPUT);
+    pinMode(LED_PIN, OUTPUT);
+    pinMode(TRIGGER_PIN, INPUT);
     Serial.begin(115200);
     delay(2000);
 
-    while (status != WL_CONNECTED)
-    {
-        Serial.print("Attempting to connect to SSID: ");
-        Serial.println(WIFI_SSID);
-        // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
-        status = WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    WiFiManager wifiManager;
 
-        // wait 5 seconds for connection:
-        delay(5000);
+    if (wifiManager.autoConnect("AutoConnectAP")){
+      Serial.println("Connected with save config");
+    } else if (!wifiManager.startConfigPortal("OnDemandAP")) {
+      Serial.println("failed to connect and hit timeout");
+      delay(3000);
+      ESP.restart();
+      delay(5000);
     }
 
     Serial.println("Connected to wifi");
@@ -66,8 +80,18 @@ void setup() {
 }
 
 void loop() {
-    if(msgReceived == 1)
-    {
+    if( digitalRead(TRIGGER_PIN) == LOW ){
+      WiFiManager wifiManager;
+      if (!wifiManager.startConfigPortal("OnDemandAP")) {
+        Serial.println("failed to connect and hit timeout");
+        delay(3000);
+        ESP.restart();
+        delay(5000);
+      }
+      Serial.println("connected...yeey :)");
+    }
+  
+    if(msgReceived == 1) {
         msgReceived = 0;
         Serial.print("Received Message:");
         Serial.println(rcvdPayload);
@@ -93,8 +117,8 @@ void loop() {
           delay(1000);
         }
     }
-    if(tick >= 5)   // publish to topic every 5seconds
-    {
+    
+    if(tick >= 5) { // publish to topic every 5seconds
         tick=0;
         sprintf(payload,"{\"state\": { \"desired\": { \"welcome\": %d }}}",msgCount++);
         if(hornbill.publish(TOPIC_NAME,payload) == 0)
