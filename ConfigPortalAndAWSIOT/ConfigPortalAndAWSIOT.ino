@@ -40,7 +40,7 @@ AWS_IOT hornbill;
 WiFiManager wifiManager;
 WiFiClient wClient;
 
-char HOST_ADDRESS[] = "a2oxjrmrtmst02.iot.us-west-2.amazonaws.com";
+char HOST_ADDRESS[] = "a2oxjrmrtmst02.iot.us-east-1.amazonaws.com";
 char CLIENT_ID[] = "TruongESP32";
 char TOPIC_NAME[] = "$aws/things/TruongESP32/shadow/update";
 
