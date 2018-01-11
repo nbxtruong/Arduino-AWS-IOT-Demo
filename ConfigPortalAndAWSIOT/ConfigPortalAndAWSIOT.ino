@@ -43,11 +43,12 @@ WiFiClient wClient;
 char HOST_ADDRESS[] = "a2oxjrmrtmst02.iot.us-east-1.amazonaws.com";
 char CLIENT_ID[] = "TruongESP32";
 char TOPIC_NAME[] = "$aws/things/TruongESP32/shadow/update";
+char OTA_TOPIC_NAME[] = "Devices-US-OTA";
 
-int tick = 0, msgCount = 0, msgReceived = 0, reConfig = 0;
+int tick = 0, msgCount = 0, msgReceived = 0, otaActive = 0, reConfig = 0;
 float temperature = 0.0, humidity = 0.0;
-char payload[512];
-char rcvdPayload[512];
+char payload[512], payloadOTA[512];
+char rcvdPayload[512], rcvdPayloadOTA[512];
 uint32_t delayMS;
 
 // Variables to validate
@@ -56,15 +57,23 @@ int contentLength = 0;
 bool isValidContentType = false;
 
 // S3 Bucket Config
-String host = "esp32dat.s3-ap-southeast-1.amazonaws.com"; // Host => bucket-name.s3.region.amazonaws.com
+//String host = "esp32dat.s3-ap-southeast-1.amazonaws.com"; // Host => bucket-name.s3.region.amazonaws.com
+String host;
 int port = 80; // Non https. For HTTPS 443. As of today, HTTPS doesn't work.
-String bin = "/ConfigPortalAndAWSIOT.ino.doitESP32devkitV1.bin"; // bin file name with a slash in front.
+//String bin = "/ConfigPortalAndAWSIOT.ino.doitESP32devkitV1.bin"; // bin file name with a slash in front.
+String bin;
 
 // List of callback function
 void mySubCallBackHandler (char *topicName, int payloadLen, char *payLoad) {
   strncpy(rcvdPayload, payLoad, payloadLen);
   rcvdPayload[payloadLen] = 0;
   msgReceived = 1;
+}
+
+void myOtaCallBackHandler (char *topicName, int payloadLen, char *payloadOTA) {
+  strncpy(rcvdPayloadOTA, payloadOTA, payloadLen);
+  rcvdPayloadOTA[payloadLen] = 0;
+  otaActive = 1;
 }
 
 // Utility to extract header value from headers
@@ -225,10 +234,18 @@ void setup() {
     delay(1000);
 
     if (0 == hornbill.subscribe(TOPIC_NAME, mySubCallBackHandler)) {
-      Serial.println("Subscribe Successfull");
+      Serial.println("Subscribe topic for push data successfull");
     }
     else {
-      Serial.println("Subscribe Failed, Check the Thing Name and Certificates");
+      Serial.println("Subscribe topic for push data Failed, Check the Thing Name and Certificates");
+      while (1);
+    }
+
+    if (0 == hornbill.subscribe(OTA_TOPIC_NAME, myOtaCallBackHandler)) {
+      Serial.println("Subscribe topic for OTA successfull");
+    }
+    else {
+      Serial.println("Subscribe topic for OTA Failed, Check the Thing Name and Certificates");
       while (1);
     }
   }
@@ -324,11 +341,41 @@ void loop() {
     }
   }
 
+  // Execute OTA Update when rec
+  if(otaActive == 1) {
+    otaActive = 0;
+    Serial.print("Received Message:");
+    Serial.println(rcvdPayloadOTA);
+
+    // Parsing json
+    StaticJsonBuffer<300> JSONBufferOTA;   //Memory pool
+    JsonObject& parsedOTA = JSONBufferOTA.parseObject(rcvdPayloadOTA);
+
+    // Check for errors in parsing
+    if (!parsedOTA.success()) {
+      Serial.println("Parsing failed");
+      delay(5000);
+      return;
+    }
+
+    // Get value of "welcome"
+    int ota = parsedOTA["activeOTA"];
+    host = parsedOTA["host"].as<String>();
+    bin = parsedOTA["bin"].as<String>();
+    
+    if (ota == 1) {
+      execOTA();
+      delay(1000);
+    } else {
+      delay(1000);
+    }
+  }
+
   if (tick % 2 == 0) { // publish to topic every 5seconds
     if (tick >= 3600) {
       // Execute OTA Update for every 1 hour and reset "tick" variable
       tick = 0;
-      execOTA();
+      // execOTA();
     }
     sprintf(payload, "{\"state\": { \"desired\": { \"welcome\": %d, \"temperature\": %f, \"humidity\": %f }}}", msgCount++, temperature, humidity );
     if (hornbill.publish(TOPIC_NAME, payload) == 0) {
